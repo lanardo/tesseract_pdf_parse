@@ -35,6 +35,7 @@ class Table:
 
     def get_table_infos(self, content):
         annos = content['annos']
+        img = content['image']
 
         # --- determine title area -------------------------------------------------
         title_anno_ids = []
@@ -97,6 +98,10 @@ class Table:
             r_pt = manager.get_right_edge(anno)
             if l_edge_pt[0] < l_pt[0] < r_pt[0] < r_edge_pt[0] and l_pt[1] > l_edge_pt[1]:
                 candidates.append(anno)
+
+        print(l_edge_pt[1], l_edge_pt[0], r_edge_pt[0])
+        crop = img[int(l_edge_pt[1]):, int(l_edge_pt[0]):int(r_edge_pt[0])]
+        cv2.imwrite("crop_1.jpg", crop)
 
         # ---------- configure the table -------------------------------------------
         lines = manager.bundle_to_lines(origin_annos=candidates)
