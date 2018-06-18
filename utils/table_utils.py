@@ -18,17 +18,20 @@ class Table:
         self.show_img_w = show_img_w
         self.show_line_w = 2
 
-        self.title = "LIGHTING FIXTURE SCHEDULE"
+        self.titles = ["LIGHTING FIXTURE SCHEDULE", "LIGHT FIXTURE SCHEDULEO"]
+        self.title = self.titles[0]
         self.fst_key = "TYPE"
 
     def candidate(self, content):
         total_text = content['total_text']
         total_text = total_text.replace(" ", "")
-        dst_word = self.title.replace(" ", "")
-        if total_text.find(dst_word) != -1:
-            return True
-        else:
-            return False
+
+        for title in self.titles:
+            dst_word = title.replace(" ", "")
+            if total_text.find(dst_word) != -1:
+                self.title = title
+                return True
+        return False
 
     def get_table_infos(self, content):
         annos = content['annos']
@@ -157,11 +160,15 @@ class Table:
             end_line_id = len(lines)
         print(merge_pair_list)
         if len(merge_pair_list) != 0:
-            for [p1, p2] in merge_pair_list:
-                key_line[p1] = key_line[p1] + key_line[p2]
-                key_anno_list[p1]['text'] = key_anno_list[p1]['text'] + key_anno_list[p2]['text']
-                key_line[p2] = None
-                key_anno_list[p2] = None
+            for p in range(len(merge_pair_list) - 1 , -1, -1):
+                [p1, p2] = merge_pair_list[p]
+                try:
+                    key_line[p1] = key_line[p1] + key_line[p2]
+                    key_anno_list[p1]['text'] = key_anno_list[p1]['text'] + key_anno_list[p2]['text']
+                    key_line[p2] = None
+                    key_anno_list[p2] = None
+                except Exception:
+                    continue
 
             i = len(key_anno_list) - 1
             while i > 0:

@@ -21,7 +21,7 @@ import logger as log
 
 class PdfUtilsWin:
 
-    def __init__(self, resolution=200):
+    def __init__(self, resolution=100):
         self.resolution = resolution  # DPI
 
     def doc2imgs(self, doc_path):

@@ -97,5 +97,5 @@ def save_temp_images(content):
 
 if __name__ == '__main__':
 
-    path = "D:/workspace/tesseract_pdf_parse/data/COM_3.pdf"
+    path = "D:/workspace/tesseract_pdf_parse/data/COM_1-1.jpg"
     ocr_proc(path)

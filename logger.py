@@ -7,7 +7,7 @@ LOG_DIR = os.path.join(root, "logs")
 
 if not os.path.isdir(LOG_DIR):
     os.mkdir(LOG_DIR)
-log_fn = LOG_DIR + "/icr.log"
+log_fn = LOG_DIR + "/light_fixture_schedule.log"
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(message)s',
                     datefmt='%d/%b/%Y %H:%M:%S',
