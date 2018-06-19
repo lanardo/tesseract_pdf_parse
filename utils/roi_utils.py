@@ -2,11 +2,11 @@ import cv2
 import numpy as np
 
 
-class ROI:
+class RoiUtils:
     def __init__(self, debug=False):
         self.debug = debug
         self.tar_width = -1
-        self.overlapThresh = 0.0001
+        self.margin = 5
 
     def binary_inv_img(self, img):
 
@@ -48,46 +48,30 @@ class ROI:
             cv2.imwrite("vertical.jpg", vertical)
 
         lines = cv2.bitwise_or(vertical, horizontal)
+        element = cv2.getStructuringElement(cv2.MORPH_RECT, (self.margin, self.margin))
+        lines = cv2.dilate(lines, element, (-1, -1))
         if self.debug:
             cv2.imwrite("lines.jpg", lines)
         return lines
 
     def extract_boxes(self, line_img):
+        # show_img = cv2.cvtColor(line_img, cv2.COLOR_GRAY2BGR)
+
         height, width = line_img.shape[:2]
-        overlap_margin = 2
         _, contours, hierarchy = cv2.findContours(line_img, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         boxes = []
         for i in range(len(contours)):
             x, y, w, h = cv2.boundingRect(contours[i])
-            if w * h > height * width // 3:
+            # print(hierarchy[0][i])
+            if w * h > height * width // 2:
                 continue
             else:
-                boxes.append([x - overlap_margin, y - overlap_margin, x + w + overlap_margin, y + h + overlap_margin])
+                boxes.append([x - self.margin, y - self.margin, x + w + self.margin, y + h + self.margin])
+                # cv2.rectangle(show_img, (x - self.margin, y - self.margin), (x+w+self.margin, y+h+self.margin), (255, 0, 0), 10)
+                # cv2.imshow("show_img", cv2.resize(show_img, (1000, 700)))
+                # cv2.waitKey(1)
+
         return boxes
-
-    def identify_table_area(self, page_img):
-        # --------------------------------- convert to the gray ---------------------------------
-        binary_inv_img = self.binary_inv_img(img=page_img)
-
-        # --------------------------------- horizon and vertical line detection -----------------
-        line_img = self.grid_lines(binary=binary_inv_img)
-
-        # ------------------------------- extract the contour -----------------------------------
-        boxes = self.extract_boxes(line_img=line_img)
-
-        # ------------------------------- merge the extracted contours --------------------------
-        candi_boxes = self.filter_non_table_area(boxes=self.non_max_suppression_fast(boxes=boxes))
-
-        # ---------------------------------------------------------------------------------------
-        binary_img = cv2.bitwise_not(binary_inv_img)
-        show_img = cv2.cvtColor(binary_img, cv2.COLOR_GRAY2BGR)
-        for [x, y, x1, y1] in candi_boxes:
-            cv2.rectangle(show_img, (x, y), (x1, y1), (0, 0, 255), 2)
-        if self.debug or True:
-            cv2.imwrite("contours.jpg", show_img)
-
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
 
     def filter_non_table_area(self, boxes):
         filters = []
@@ -136,10 +120,41 @@ class ROI:
             merged.append([r_x1, r_y1, r_x2, r_y2])
         return merged
 
+    def identify_table_area(self, page_img):
+        # --------------------------------- convert to the gray ---------------------------------
+        binary_inv_img = self.binary_inv_img(img=page_img)
+
+        # --------------------------------- horizon and vertical line detection -----------------
+        line_img = self.grid_lines(binary=binary_inv_img)
+
+        # ------------------------------- extract the contour -----------------------------------
+        boxes = self.extract_boxes(line_img=line_img)
+
+        # ------------------------------- merge the extracted contours --------------------------
+        merged_boxes = self.non_max_suppression_fast(boxes=boxes)
+        candi_boxes = self.filter_non_table_area(boxes=merged_boxes)
+
+        # ---------------------------------------------------------------------------------------
+        binary_img = cv2.bitwise_not(binary_inv_img)
+        show_img = cv2.cvtColor(binary_img, cv2.COLOR_GRAY2BGR)
+        # for [x, y, x1, y1] in boxes:
+        #     cv2.rectangle(show_img, (x, y), (x1, y1), (255, 0, 0), 2)
+        # for [x, y, x1, y1] in merged_boxes:
+        #     cv2.rectangle(show_img, (x, y), (x1, y1), (0, 0, 255), 2)
+
+        for [x, y, x1, y1] in candi_boxes:
+            cv2.rectangle(show_img, (x, y), (x1, y1), (0, 0, 255), 10)
+
+        cv2.imwrite("contours.jpg", show_img)
+
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        return candi_boxes
+
 
 if __name__ == '__main__':
-    roi = ROI()
-    path = "D:/workspace/tesseract_pdf_parse/data/COM_15-1.jpg"
+    roi = RoiUtils()
+    path = "D:/workspace/tesseract_pdf_parse/data/COM_1-1.jpg"
 
     img = cv2.imread(path)
 

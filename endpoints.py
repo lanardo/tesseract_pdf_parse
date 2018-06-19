@@ -1,16 +1,11 @@
-
-import os
-import queue as qu
-import sys
-import threading as thr
-
-import cv2
-
 import logger as log
 from utils.table_utils import Table
 from utils.settings import *
 from utils.settings import MACHINE
 from utils.vision_utils import VisionUtils
+from utils.roi_utils import RoiUtils
+from utils.settings import *
+
 if MACHINE == "EC2":
     from utils.pdf_utils_ubuntu import PdfUtilsUbuntu
     pdf = PdfUtilsUbuntu()
@@ -21,17 +16,19 @@ else:
 
 vis = VisionUtils(debug=False)
 tab = Table(debug=False)
+roi = RoiUtils(debug=False)
 
 
 def ocr_proc(src_file, debug=False):
 
     if not os.path.exists(src_file):
-        log.log_print("\t no exist such file! {}\n".format(src_file))
-        sys.exit(1)
+        err_msg = "no exist such file!"
+        log.log_print("\t {}, {}\n".format(err_msg, src_file))
+        return err_msg
 
     # ------------------ convert pdf to page images ----------------------------------------------------
     log.log_print("\n\t>>> {}".format(src_file))
-
+    page_img_paths = []
     if os.path.splitext(src_file)[1].upper() == ".PDF":
         log.log_print("\tpdf to imgs...")
         page_img_paths = pdf.doc2imgs(doc_path=src_file)
@@ -39,24 +36,67 @@ def ocr_proc(src_file, debug=False):
     elif os.path.splitext(src_file)[1].upper() in [".JPG", ".PNG"]:
         page_img_paths = [src_file]
 
-    # ------------------ imges to pdf ------------------------------------------------------------------
+    if len(page_img_paths) == 0:
+        err_msg = "not readable pdf format"
+        log.log_print("\t" + err_msg + "\n")
+        return err_msg
+
+    # ------------------ extract the roi (table_areas) -------------------------------------------------
+    pages = []
+    for path in page_img_paths:
+        img = cv2.imread(path)
+        if img is None:
+            continue
+        boxes = roi.identify_table_area(page_img=img)
+        if len(boxes) == 0:
+            continue
+
+        crops = []
+        for box in boxes:
+            [x1, y1, x2, y2] = box
+            crop_img = img[y1:y2, x1:x2]
+            crops.append({
+                "crop_img": crop_img,
+                "box": box
+            })
+        pages.append({
+            "id": page_img_paths.index(path),
+            "page_img": img,
+            "crops": crops
+        })
+
+    if len(pages) == 0:
+        err_msg = "no containing tables!"
+        log.log_print("\t" + err_msg + "\n")
+        return err_msg
+
+    # ------------------ images to pdf -----------------------------------------------------------------
     log.log_print("\tgoogle vision api...")
     page_contents_queue = qu.Queue()
     threads = []
     while page_contents_queue.qsize() == 0:
         # start the multi requests
-        for path in page_img_paths:
+        for page in pages:
             if debug:
-                log.log_print("\tpage No: {}".format(page_img_paths.index(path) + 1))
-            # detect the text from the image
-            idx = page_img_paths.index(path)
-            thread = thr.Thread(target=vis.detect_text, args=(path, idx, page_contents_queue))
-            threads.append(thread)
-            thread.start()
-        # join
-        for thread in threads:
-            if thread is not None and thread.isAlive():
-                thread.join()
+                log.log_print("\tpage No: {}".format(page["id"] + 1))
+
+            page_idx = pages.index(page)
+            crops = page["crops"]
+            for i in range(len(crops)):
+                crop = crops[i]
+                box_idx = i
+                crop_img = crop["crop_img"]
+                if crop_img is None:
+                    continue
+
+                thread = thr.Thread(target=vis.detect_text, args=(crop_img, page_idx, box_idx, page_contents_queue))
+                threads.append(thread)
+                thread.start()
+
+            # join
+            for thread in threads:
+                if thread is not None and thread.isAlive():
+                    thread.join()
 
         if page_contents_queue.qsize() == 0:
             log.log_print("response error. resend the request...")
@@ -69,19 +109,31 @@ def ocr_proc(src_file, debug=False):
         content = page_contents_queue.get(True, 1)
         if content is None:
             continue
-
         if tab.candidate(content):
             contents.append(content)
 
-    # ------------------ parsing and the invoice information ---------------------------------------------
     if len(contents) == 0:
-        err_msg = "not candidate document"
-        log.log_print(err_msg)
+        err_msg = "not contain candidate table"
+        log.log_print("\t" + err_msg + "\n")
         return err_msg
 
-    contents = sorted(contents, key=lambda k: k['id'])
+    # ------------------ parsing and the invoice information ---------------------------------------------
+    """
+        'page_idx': page_idx,
+        'box_idx': box_idx,
+        'annos': annos,
+        'label': 'text',
+        'orientation': orientation,
+        'image': img,
+        'total_text': annotations[0]['description']
+    """
+    contents = sorted(contents, key=lambda k: k['page_id'])
+    # for content in contents:
+    #     img = content['image']
+    #     cv2.imshow("show", img)
+    #     cv2.waitKey(0)
 
-    result_dict = tab.parse_table(contents=contents)
+    result_dict = tab.parse_table(content=contents[0])
     print(result_dict)
     return result_dict
 
@@ -97,5 +149,5 @@ def save_temp_images(content):
 
 if __name__ == '__main__':
 
-    path = "D:/workspace/tesseract_pdf_parse/data/COM_1-1.jpg"
+    path = "D:/workspace/tesseract_pdf_parse/data/COM_15-1.jpg"
     ocr_proc(path)

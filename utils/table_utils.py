@@ -33,9 +33,11 @@ class Table:
                 return True
         return False
 
-    def get_table_infos(self, content):
+    def parse_table(self, content):
         annos = content['annos']
         img = content['image']
+
+        lines = manager.bundle_to_lines()
 
         # --- determine title area -------------------------------------------------
         title_anno_ids = []
@@ -270,7 +272,3 @@ class Table:
                 dict_line[key_line[i]] = value_line[i]
             result_dicts.append(dict_line)
         return result_dicts
-
-    def parse_table(self, contents):
-        # recognize the template type -----------------------------------------
-        return self.get_table_infos(content=contents[0])

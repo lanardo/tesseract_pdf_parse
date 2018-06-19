@@ -1,5 +1,27 @@
+import os
+import cv2
+import sys
+import json
+import base64
+import requests
+import queue as qu
+import numpy as np
+import threading as thr
 # api key
 API_KEY = 'AIzaSyC_X5oZ5WdKAru6AGNrggNyMZNgs_w5elI'
+
+# endpoints
+ORIENTATION_270_DEGREE = 0
+ORIENTATION_180_DEGREE = 1
+ORIENTATION_90_DEGREE = 2
+ORIENTATION_NORMAL = 3
+
+ROTATE_90_CLOCKWISE = 0
+ROTATE_180 = 1
+ROTATE_90_COUNTERCLOCKWISE = 2
+
+
+MAXIMUM_SIZE = 2.5 * 1024 * 1024  # google could api limitation 4 MB
 
 ALLOWED_EXT = [".pdf", ".jpg"]
 

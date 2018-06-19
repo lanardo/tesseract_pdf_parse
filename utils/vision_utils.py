@@ -1,28 +1,10 @@
-import cv2
-import base64
-import json
-import requests
-import sys
-import numpy as np
+from utils.settings import *
 from PIL import Image, ExifTags
 import logger as log
 if sys.version_info[0] == 3:  # python 3x
     import queue as qu
 if sys.version_info[0] == 2:  # python 2x
     import Queue as qu
-
-
-ORIENTATION_270_DEGREE = 0
-ORIENTATION_180_DEGREE = 1
-ORIENTATION_90_DEGREE = 2
-ORIENTATION_NORMAL = 3
-
-ROTATE_90_CLOCKWISE = 0
-ROTATE_180 = 1
-ROTATE_90_COUNTERCLOCKWISE = 2
-
-
-MAXIMUM_SIZE = 2.5 * 1024 * 1024  # google could api limitation 4 MB
 
 
 def load_image(image_path):
@@ -179,26 +161,15 @@ class VisionUtils:
                               'y': new_y})
             anno['boundingBox']['vertices'] = new_bound
 
-    def detect_text(self, path, idx, proc_queue):
+    def detect_text(self, img, page_idx, box_idx, proc_queue):
         try:
-            img = load_image(path)
-            img = cv2.fastNlMeansDenoisingColored(img, None, 10, 10, 7, 21)
-
-            if img is None:
-                log.log_print("\t not readable pdf format")
-                sys.exit(0)
-
             if self.debug:
                 log.log_print("\t send request" + path)
 
-            response = self.__get_response(self.__make_request(cv_img=img, feature_types=['DOCUMENT_TEXT_DETECTION',
-                                                                                          'TEXT_DETECTION',
-                                                                                          'LABEL_DETECTION']))
-
+            response = self.__get_response(self.__make_request(cv_img=img, feature_types=['DOCUMENT_TEXT_DETECTION', 'TEXT_DETECTION', 'LABEL_DETECTION']))
             if response is None:
                 result = None
                 log.log_print("\t\tresponse error of google vision api\n")
-
             else:
                 # check the label of the uploaded image data
                 annos = []
@@ -222,10 +193,9 @@ class VisionUtils:
                             pt0 = annos[i]['boundingBox']['vertices'][j]
                             pt1 = annos[i]['boundingBox']['vertices'][j + 1]
                             cv2.line(img, (pt0['x'], pt0['y']), (pt1['x'], pt1['y']), (255, 0, 0), 1)
-                    # cv2.imshow("img", img)
-                    # cv2.waitKey(0)
 
-                result = {'id': idx,
+                result = {'page_id': page_idx,
+                          'box_idx': box_idx,
                           'annos': annos,
                           'label': 'text',
                           'orientation': orientation,
