@@ -1,3 +1,6 @@
+# api key
+API_KEY = 'AIzaSyC_X5oZ5WdKAru6AGNrggNyMZNgs_w5elI'
+
 ALLOWED_EXT = [".pdf", ".jpg"]
 
 # predefined the location for saving the uploaded files
@@ -11,8 +14,6 @@ MACHINE = "EC2"  # which is for the pdf manager
 
 
 TITLE = "LIGHTING FIXTURE SCHEDULE"
-
-
 
 try:
     from utils.settings_local import *

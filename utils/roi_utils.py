@@ -3,13 +3,13 @@ import numpy as np
 
 
 class ROI:
-    def __init__(self, debug):
+    def __init__(self, debug=False):
         self.debug = debug
-        self.tar_width = 1000
+        self.tar_width = -1
         self.overlapThresh = 0.0001
 
-    def identifi_table_area(self, img):
-        # --------------------------------- convert to the gray ----------------------------------
+    def binary_inv_img(self, img):
+
         if len(img.shape) == 3 and img.shape[2] != 1:
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         else:
@@ -26,17 +26,21 @@ class ROI:
         if self.debug:
             cv2.imwrite("thresh.jpg", thresh)
 
-        # --------------------------------- horizon and vertical line detection -------------------
-        horizontal = thresh.copy()
-        h_sz = int(tar_width / 30)
+        return thresh
+
+    def grid_lines(self, binary):
+        height, width = binary.shape[:2]
+
+        horizontal = binary.copy()
+        h_sz = int(width / 30)
         h_element = cv2.getStructuringElement(cv2.MORPH_RECT, (h_sz, 1))
         horizontal = cv2.erode(horizontal, h_element, (-1, -1))
         horizontal = cv2.dilate(horizontal, h_element, (-1, -1))
         if self.debug:
             cv2.imwrite("horizontal.jpg", horizontal)
 
-        vertical = thresh.copy()
-        v_sz = int(tar_height / 30)
+        vertical = binary.copy()
+        v_sz = int(height / 30)
         v_element = cv2.getStructuringElement(cv2.MORPH_RECT, (1, v_sz))
         vertical = cv2.erode(vertical, v_element, (-1, -1))
         vertical = cv2.dilate(vertical, v_element, (-1, -1))
@@ -46,34 +50,57 @@ class ROI:
         lines = cv2.bitwise_or(vertical, horizontal)
         if self.debug:
             cv2.imwrite("lines.jpg", lines)
+        return lines
 
-        # ------------------------------- extract the contour -----------------------------------
+    def extract_boxes(self, line_img):
+        height, width = line_img.shape[:2]
         overlap_margin = 2
-        show_img = cv2.cvtColor(resize, cv2.COLOR_GRAY2BGR)
-        _, contours, hierarchy = cv2.findContours(lines, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        _, contours, hierarchy = cv2.findContours(line_img, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         boxes = []
         for i in range(len(contours)):
             x, y, w, h = cv2.boundingRect(contours[i])
-            cv2.rectangle(show_img, (x, y), (x+w, y+h), (255, 255, 0), 1)
-            if w * h > tar_height * tar_width // 3:
+            if w * h > height * width // 3:
                 continue
             else:
                 boxes.append([x - overlap_margin, y - overlap_margin, x + w + overlap_margin, y + h + overlap_margin])
+        return boxes
 
-            # cv2.imshow("show", show_img)
-            # cv2.waitKey(0)
+    def identify_table_area(self, page_img):
+        # --------------------------------- convert to the gray ---------------------------------
+        binary_inv_img = self.binary_inv_img(img=page_img)
 
-        merged = self.non_max_suppression_fast(boxes=boxes, img=show_img)
+        # --------------------------------- horizon and vertical line detection -----------------
+        line_img = self.grid_lines(binary=binary_inv_img)
 
-        for [x, y, x1, y1] in merged:
+        # ------------------------------- extract the contour -----------------------------------
+        boxes = self.extract_boxes(line_img=line_img)
+
+        # ------------------------------- merge the extracted contours --------------------------
+        candi_boxes = self.filter_non_table_area(boxes=self.non_max_suppression_fast(boxes=boxes))
+
+        # ---------------------------------------------------------------------------------------
+        binary_img = cv2.bitwise_not(binary_inv_img)
+        show_img = cv2.cvtColor(binary_img, cv2.COLOR_GRAY2BGR)
+        for [x, y, x1, y1] in candi_boxes:
             cv2.rectangle(show_img, (x, y), (x1, y1), (0, 0, 255), 2)
-        if self.debug:
+        if self.debug or True:
             cv2.imwrite("contours.jpg", show_img)
 
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
-    def non_max_suppression_fast(self, boxes, img):
+    def filter_non_table_area(self, boxes):
+        filters = []
+        for box in boxes:
+            [x1, y1, x2, y2] = box
+            w = x2 - x1
+            h = y2 - y1
+            if w > h * 10 or h > w * 10:
+                continue
+            filters.append(box)
+        return filters
+
+    def non_max_suppression_fast(self, boxes):
         if len(boxes) == 0:
             return []
 
@@ -116,4 +143,4 @@ if __name__ == '__main__':
 
     img = cv2.imread(path)
 
-    roi.identifi_table_area(img)
+    roi.identify_table_area(img)

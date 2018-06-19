@@ -57,7 +57,7 @@ class VisionUtils:
     def __init__(self, debug=False):
 
         self.endpoint_url = 'https://vision.googleapis.com/v1/images:annotate'
-        self.api_key = 'AIzaSyC_X5oZ5WdKAru6AGNrggNyMZNgs_w5elI'
+        self.api_key = API_KEY
         self.debug = debug
 
     def __make_request(self, cv_img, feature_types):
