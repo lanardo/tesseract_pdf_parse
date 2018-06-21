@@ -139,8 +139,8 @@ def ocr_proc(src_file, debug=False):
     #     cv2.imshow("show", img)
     #     cv2.waitKey(0)
 
-    result_dict = tab.parse_table(contents=contents)
-    return result_dict
+    res = tab.parse_table(contents=contents)
+    return res
 
 
 def save_temp_images(content):

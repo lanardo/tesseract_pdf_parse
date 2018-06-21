@@ -2,7 +2,7 @@ import base64
 import json
 import os
 
-from flask import Flask, render_template, request, send_file
+from flask import Flask, render_template, request, send_file, jsonify
 from werkzeug.utils import secure_filename
 from utils.settings import *
 
@@ -26,53 +26,6 @@ def ocr():
         initial rendering of the web interface
     """
     return render_template('table.html')
-
-
-@app.route('/binary', methods=['POST'])
-def binary():
-    if len(request.files) > 0:
-        file = request.files['file']
-        doc_fn = secure_filename(file.filename)
-
-        if not (file and allowed_file(file.filename)):
-            str = "\tnot allowed file format {}.".format(doc_fn)
-            log.log_print(str)
-            return str
-        try:
-            # upload the file to the server -------------------------------------------------------
-            log.log_print("\t>>>uploading invoice {}".format(file.filename))
-
-            # check its directory for uploading the requested file --------------------------------
-            if not os.path.isdir(UPLOAD_DIR):
-                os.mkdir(UPLOAD_DIR)
-
-            # remove all the previous processed document file -------------------------------------
-            for fname in os.listdir(UPLOAD_DIR):
-                path = os.path.join(UPLOAD_DIR, fname)
-                if os.path.isfile(path):
-                    os.remove(path)
-
-            # save the uploaded document on UPLOAD_DIR --------------------------------------------
-            file.save(os.path.join(UPLOAD_DIR, doc_fn))
-
-            # ocr progress with the uploaded files ------------------------------------------------
-            src_fpath = os.path.join(UPLOAD_DIR, doc_fn)
-            binary_info = endpoints.binary_code_proc(src_file=src_fpath)
-            log.log_print("\n>>>finished")
-
-            # return the result dict as a json file -----------------------------------------------
-            # finally: writing the json string to disk
-            #     note the 'w' flag, no 'b' needed as we deal with text here
-            result_fn = os.path.splitext(doc_fn)[0] + "_binary" + ".json"
-            result_path = os.path.join(UPLOAD_DIR, result_fn)
-            with open(result_path, 'w') as fp:
-                json.dump(binary_info, fp, ensure_ascii=False)
-            return send_file(result_path, as_attachment=True)
-
-        except Exception as e:
-            error_str = '\tException: {}'.format(e)
-            log.log_print("\t exception :" + error_str)
-            return error_str
 
 
 @app.route('/submit', methods=['POST'])
@@ -104,15 +57,10 @@ def submit():
 
             # ocr progress with the uploaded files ------------------------------------------------
             src_fpath = os.path.join(UPLOAD_DIR, doc_fn)
-            invoice_info = endpoints.ocr_proc(src_file=src_fpath)
+            ressult = endpoints.ocr_proc(src_file=src_fpath)
             log.log_print("\n>>>finished")
 
-            # return the result dict as a json file -----------------------------------------------
-            result_fn = os.path.splitext(doc_fn)[0] + ".json"
-            result_path = os.path.join(UPLOAD_DIR, result_fn)
-            with open(result_path, 'w') as fp:
-                json.dump(invoice_info, fp, ensure_ascii=False)
-            return send_file(result_path, as_attachment=True)
+            return jsonify(ressult)
 
         except Exception as e:
             error_str = '\tException: {}'.format(e)

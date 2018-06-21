@@ -197,17 +197,19 @@ class Table:
 
         title = res_dict['title']
         print("\n>>> title: ")
-        print(title)
+        print(title.encode('utf-8'))
 
         keywords = res_dict['keywords']
         print("\n>>> keywords: ")
         for key in keywords:
-            sys.stdout.write('[' + key + '], ')
+            print(key.encode('utf-8'))
 
         lines = res_dict['lines']
         print("\n>>> Table: ")
         for line in lines:
-            print(line)
+            print()
+            for value in line:
+                sys.stdout.write(" {}".format(value.encode('utf-8')))
 
     def parse_content(self, content):
         annos = content['annos']
@@ -258,7 +260,7 @@ class Table:
 
         print("\n>>> raw lines: ")
         for line in lines:
-            print(line['text'])
+            print(line['text'].encode('utf-8'))
         return {
             'title': title_text,
             'lines': table,
@@ -276,6 +278,11 @@ class Table:
                 max_content_id = i
 
         print("max_num_anno_content_id: ", max_content_id)
-        res_dict = self.parse_content(contents[max_content_id])
-        self.show_dict(res_dict)
-        return res_dict
+        result = self.parse_content(contents[max_content_id])
+
+        if type(result) == str:
+            print(result)
+        else:
+            # self.show_dict(result)
+            pass
+        return result
