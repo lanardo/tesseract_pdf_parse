@@ -136,20 +136,19 @@ class RoiUtils:
 
         # ---------------------------------------------------------------------------------------
         binary_img = cv2.bitwise_not(binary_inv_img)
+
         show_img = cv2.cvtColor(binary_img, cv2.COLOR_GRAY2BGR)
         # for [x, y, x1, y1] in boxes:
         #     cv2.rectangle(show_img, (x, y), (x1, y1), (255, 0, 0), 2)
         # for [x, y, x1, y1] in merged_boxes:
         #     cv2.rectangle(show_img, (x, y), (x1, y1), (0, 0, 255), 2)
-
         for [x, y, x1, y1] in candi_boxes:
             cv2.rectangle(show_img, (x, y), (x1, y1), (0, 0, 255), 10)
-
         cv2.imwrite("contours.jpg", show_img)
+        candi_img = binary_img + line_img
+        cv2.imwrite("candi_img.jpg", candi_img)
 
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-        return candi_boxes
+        return candi_boxes, candi_img
 
 
 if __name__ == '__main__':

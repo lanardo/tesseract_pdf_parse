@@ -47,7 +47,10 @@ class VisionUtils:
 
         # Read the image and convert to json
         h, w = cv_img.shape[:2]
-        gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
+        if len(cv_img.shape) != 2:
+            gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = cv_img.copy()
         _ratio = float(MAXIMUM_SIZE) / float(h * w)
         _quality = min(int(_ratio * 10) * 10, 100)
         # log.log_print("\t _quality: {}".format(_quality))
@@ -59,12 +62,12 @@ class VisionUtils:
         for feature_type in feature_types:
             feature_obj.append({'type': feature_type})
 
-        # context_obj = {"languageHints": ['en']}
+        context_obj = {"languageHints": ['en']}
 
         request_list.append(
             {'image': content_obj,
              'features': feature_obj,
-             # 'imageContext': context_obj
+             'imageContext': context_obj
              }
         )
         return json.dumps({'requests': request_list}).encode()

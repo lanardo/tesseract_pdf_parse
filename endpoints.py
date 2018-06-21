@@ -47,14 +47,14 @@ def ocr_proc(src_file, debug=False):
         img = cv2.imread(path)
         if img is None:
             continue
-        boxes = roi.identify_table_area(page_img=img)
+        boxes, new_img = roi.identify_table_area(page_img=img)
         if len(boxes) == 0:
             continue
 
         crops = []
         for box in boxes:
             [x1, y1, x2, y2] = box
-            crop_img = img[y1:y2, x1:x2]
+            crop_img = new_img[y1:y2, x1:x2]
             crops.append({
                 "crop_img": crop_img,
                 "box": box
@@ -139,7 +139,6 @@ def ocr_proc(src_file, debug=False):
     #     cv2.waitKey(0)
 
     result_dict = tab.parse_table(content=content)
-    print(result_dict)
     return result_dict
 
 
@@ -153,6 +152,5 @@ def save_temp_images(content):
 
 
 if __name__ == '__main__':
-
-    path = "D:/workspace/tesseract_pdf_parse/data/example_pdf/COM_7.pdf"
+    path = "D:/workspace/tesseract_pdf_parse/data/example_pdf/COM_2.pdf"
     ocr_proc(path)

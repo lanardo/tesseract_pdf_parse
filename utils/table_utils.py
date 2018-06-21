@@ -3,7 +3,7 @@ import utils.string_manage as stringer
 import utils.text_annos_manage as manager
 from utils.settings import *
 
-EMP = ""
+EMP = ''
 THRESH_MERGE = 1.5
 SP = "_"
 
@@ -14,16 +14,16 @@ class Table:
         self.show_img_w = show_img_w
         self.show_line_w = 2
 
-        self.titles = ["LIGHTING FIXTURE SCHEDULE", "LIGHT FIXTURE SCHEDULEO"]
+        self.titles = ["LIGHTING FIXTURE SCHEDULE", "LIGHT FIXTURE SCHEDULE"]
         self.title = self.titles[0]
-        self.fst_key = "TYPE"
+        self.fst_keys = ["TYPE", "DESCRIPTION"]
 
     def candidate(self, content):
         total_text = content['total_text']
-        total_text = total_text.replace(" ", "")
+        total_text = total_text.replace(" ", EMP)
 
         for title in self.titles:
-            dst_word = title.replace(" ", "")
+            dst_word = title.replace(" ", EMP)
             if total_text.find(dst_word) != -1:
                 self.title = title
                 return True
@@ -47,47 +47,87 @@ class Table:
         for i in range(len(to_del_ids)-1, -1, -1):
             del annos[to_del_ids[i]]
 
-        # --- bundle to the lines --------------------------------------------------------------
+        # --- bundle to the lines --------------------------------------------------------------------------------------
         lines = manager.bundle_to_lines(origin_annos=annos)
 
-        # --- merge the neighbors --------------------------------------------------------------
+        # --- merge the neighbors --------------------------------------------------------------------------------------
         manager.merge_annos_on_lines(lines=lines, annos=annos)
 
-        # --- determine title line -------------------------------------------------------------
-        """
-            line = {
-                    'ids': line,
-                    'pos': line_pos, 
-                    'text': line_text}
-                    )
-        """
-        title_line_id = -1
-        for i in range(len(lines)):
-            line = lines[i]
-            line_text = line['text'].replace(' ', '')
-            for title in self.titles:
-                title_text = title.replace(' ', '')
-                if line_text.find(title_text) != -1:
-                    title_line_id = i
-                    res_title = title
-                    break
-
+        # --- determine title line -------------------------------------------------------------------------------------
+        title_line_id, title_text = self.find_title_line(lines=lines)
         if title_line_id == -1:
             err_msg = "can not find the title"
             return err_msg
 
-        # ----------------------------- configure the keywords -------------------------------------------
-        keyword = "TYPE"
-        keyword_line_id = -1
-        for line_id in range(title_line_id + 1, len(lines)):
-            if lines[line_id]['text'].find(keyword) != -1:
-                keyword_line_id = line_id
-                break
+        # --- configure the keywords -----------------------------------------------------------------------------------
+        keyword_line_id = self.find_keyword_lind(lines=lines, title_line_id=title_line_id)
         if keyword_line_id == -1:
             err_msg = "can not find keyword line with {}".format(keyword)
             return err_msg
 
-        # --------------------- update the keyword multi line --------------------------------
+        # --------------------- update the keyword multi line ----------------------------------------------------------
+        key_annos, start_line_id = self.update_multi_keyword_line(annos=annos, lines=lines,
+                                                                  keyword_line_id=keyword_line_id,
+                                                                  title_line_id=title_line_id)
+        if start_line_id == -1:
+            err_msg = "error on configure the keyword lines"
+            return err_msg
+
+        # ----------- configure the table ------------------------------------------------------------------------------
+        table, _ = self.configure_table(annos=annos, lines=lines, key_annos=key_annos, start_line_id=start_line_id)
+
+        # --- show the result of the table -----------------------------------------------------------------------------
+        print("\n>>> lines: ")
+        for line in lines:
+            print(line['text'])
+        print("\n>>> keywords: ")
+        for key in key_annos:
+            sys.stdout.write('[' + key['text'] + '], ')
+        print("\n>>> Table: ")
+        for line in table:
+            print(line)
+
+        return {
+            'title': title_text,
+            'lines': table,
+            'keywords': [key_anno['text'] for key_anno in key_annos]
+        }
+
+    def find_title_line(self, lines):
+        """
+                    line = {
+                            'ids': line,
+                            'pos': line_pos,
+                            'text': line_text}
+                            )
+                """
+        res_title = EMP
+        title_line_id = -1
+        for i in range(len(lines)):
+            line = lines[i]
+            line_text = line['text'].replace(' ', EMP)
+            for title in self.titles:
+                title_text = title.replace(' ', EMP)
+                if line_text.find(title_text) != -1:
+                    title_line_id = i
+                    res_title = title
+                    break
+        return title_line_id, res_title
+
+    def find_keyword_lind(self, lines, title_line_id):
+        keyword_line_id = -1
+        for line_id in range(title_line_id + 1, len(lines)):
+            for dst_keyword in self.fst_keys:
+                if lines[line_id]['text'].find(dst_keyword) != -1:
+                    keyword_line_id = line_id
+                    break
+            if keyword_line_id != -1:
+                break
+        if keyword_line_id == -1 or keyword_line_id > 5:
+            return title_line_id + 1
+        return keyword_line_id
+
+    def update_multi_keyword_line(self, annos, lines, keyword_line_id, title_line_id):
         keyword_line = lines[keyword_line_id]
         key_annos = []
         for id in keyword_line['ids']:
@@ -103,15 +143,17 @@ class Table:
                 for id in cur_line['ids']:
                     j = 0
                     while j < len(key_annos):
-                        if j != len(key_annos):
-                            if manager.get_right_edge(key_annos[j])[0] < manager.get_left_edge(annos[id])[0] < manager.get_left_edge(key_annos[j + 1])[0]:
+                        if j != len(key_annos) - 1:
+                            if manager.get_right_edge(key_annos[j])[0] < manager.get_left_edge(annos[id])[0] < \
+                                    manager.get_left_edge(key_annos[j + 1])[0]:
                                 key_annos.insert(j + 1, annos[id])
                                 break
                         elif j == len(key_annos) - 1:
                             if manager.get_right_edge(key_annos[j])[0] < manager.get_left_edge(annos[id])[0]:
                                 key_annos.append(annos[id])
                                 break
-                        if manager.get_left_edge(key_annos[j])[0] < manager.get_left_edge(annos[id])[0] < manager.get_right_edge(key_annos[j + 1])[0]:
+                        if j < len(key_annos) and \
+                                manager.get_left_edge(key_annos[j])[0] < manager.get_cenpt(annos[id])[0] < manager.get_right_edge(key_annos[j])[0]:
                             key_annos[j]['text'] = annos[id]['text'] + SP + key_annos[j]['text']
                         j += 1
 
@@ -119,75 +161,92 @@ class Table:
                 if len(cur_line['ids']) > len(key_annos) // 3:
                     start_line_id = line_id
                     break
+
+                to_update_key_ids = [[] for i in range(len(key_annos))]
                 for id in cur_line['ids']:
-                    j = 0
-                    to_update_key_ids = [[]] * len(key_annos)
-                    while j < len(key_annos):
+                    for j in range(len(key_annos) - 1, -1, -1):
                         if j == 0:
                             if 0 < manager.get_cenpt(annos[id])[0] < manager.get_left_edge(key_annos[1])[0]:
                                 to_update_key_ids[0].append(annos[id])
+                                break
                         elif j == len(key_annos) - 1:
                             if manager.get_right_edge(key_annos[-2])[0] < manager.get_cenpt(annos[id])[0] < img_width:
                                 to_update_key_ids[-1].append(annos[id])
-                        elif manager.get_right_edge(key_annos[j - 1])[0] < manager.get_cenpt(annos[id])[0] < \
-                                manager.get_left_edge(key_annos[j + 1])[0]:
+                                break
+                        elif manager.get_right_edge(key_annos[j - 1])[0] < manager.get_left_edge(annos[id])[0] < \
+                                manager.get_right_edge(annos[id])[0] < manager.get_left_edge(key_annos[j + 1])[0]:
                             to_update_key_ids[j].append(annos[id])
+                            break
 
-                    for j in range(len(to_update_key_ids) - 1, -1, -1):
-                        if len(to_update_key_ids[j]) == 0:
-                            continue
-                        base = key_annos[j]['text']
-                        del key_annos[j]
-                        for k in range(len(to_update_key_ids[j])-1, -1, -1):
-                            anno = to_update_key_ids[j][k]
-                            anno['text'] = base + anno['text']
-                            key_annos.insert(j, anno)
+                for j in range(len(to_update_key_ids) - 1, -1, -1):
+                    if len(to_update_key_ids[j]) == 0:
+                        continue
+                    base = key_annos[j]['text']
+                    del key_annos[j]
+                    for k in range(len(to_update_key_ids[j]) - 1, -1, -1):
+                        anno = to_update_key_ids[j][k]
+                        anno['text'] = base + SP + anno['text']
+                        key_annos.insert(j, anno)
 
-        if start_line_id == -1:
-            err_msg = "error on configure the keyword lines"
-            return err_msg
+        return key_annos, start_line_id
 
-        # ----------- configure the table ------------------------------------------------------------
+    def configure_table(self, annos, lines, key_annos, start_line_id):
         table = []
         last_line = None
         end_flag = False
         for line_id in range(start_line_id, len(lines)):
+            cur_line = lines[line_id]
             if last_line is None:
                 dis = 0
             else:
                 dis = cur_line['pos'] - last_line['pos']
-
             cur_height = manager.get_height(annos[cur_line['ids'][0]])
-            if dis > cur_height * 0.5:
+            if dis > cur_height * 3.5:
                 end_flag = True
                 break
 
-            value_line = [''] * len(key_annos)
+            value_line = [EMP] * len(key_annos)
             end_flag = False
             for id in cur_line['ids']:
+                _candi_line_flag = False
                 for j in range(len(key_annos)):
-                    if j == 0:
-                        if 0 < manager.get_cenpt(annos[id])[0] < manager.get_left_edge(key_annos[2])[0]:
-                            value_line[0] = annos[id]['text']
-                    elif j == len(key_annos) - 1:
-                        if manager.get_right_edge(key_annos[-2])[0] < manager.get_cenpt(annos[id])[0] < img_width:
-                            value_line[-1] = annos[id]['text']
-                    elif manager.get_right_edge(key_annos[j-1])[0] < manager.get_cenpt(annos[id])[0] < manager.get_left_edge(key_annos[j+1])[0]:
-                        value_line[j] = annos[id]['text']
-                    else:
-                        end_flag = True
+                    if j > 0 and manager.get_left_edge(annos[id])[0] < manager.get_right_edge(key_annos[j-1])[0] < manager.get_left_edge(key_annos[j])[0] < manager.get_right_edge(annos[id])[0]:
+                        _candi_line_flag = False
                         break
+
+                    if j == 0:
+                        if 0 < manager.get_cenpt(annos[id])[0] < manager.get_left_edge(key_annos[1])[0]:
+                            value_line[0] = annos[id]['text']
+                            _candi_line_flag = True
+                            break
+                    elif j == len(key_annos) - 1:
+                        if manager.get_right_edge(key_annos[-2])[0] < manager.get_cenpt(annos[id])[0]:
+                            value_line[-1] = annos[id]['text']
+                            _candi_line_flag = True
+                            break
+                    elif manager.get_right_edge(key_annos[j-1])[0] < manager.get_left_edge(annos[id])[0] < manager.get_right_edge(annos[id])[0] < manager.get_left_edge(key_annos[j+1])[0]:
+                        value_line[j] = annos[id]['text']
+                        _candi_line_flag = True
+                        break
+
+                if not _candi_line_flag:
+                    end_flag = True
+
             if end_flag:
                 break
-            else:
-                table.append(value_line)
 
-        for key in key_annos:
-            sys.stdout.write(key['text'] + ' ')
-        for line in table:
-            print(line)
-        return {
-            'title': res_title,
-            'lines': table,
-            'keywords': [key_anno['text'] for key_anno in key_annos]
-        }
+            else:
+                dis1 = lines[line_id]['pos'] - lines[line_id - 1]['pos']
+                dis2 = lines[line_id - 1]['pos'] - lines[line_id - 2]['pos']
+                num_no_empty = len(value_line) - value_line.count(EMP)
+                if 2 < line_id < len(lines) - 1 and dis2 > dis1 and dis1 < cur_height * 1.5 and num_no_empty < len(value_line) // 3:
+                    for j in range(len(value_line)):
+                        table[-1][j] = table[-1][j] + ' ' + value_line[j]
+                elif 2 < line_id < len(lines) - 1 and num_no_empty <= len(value_line) // 4 and value_line[0] != EMP:
+                    end_flag = True
+                    continue
+                else:
+                    table.append(value_line)
+                last_line = lines[line_id]
+
+        return table, end_flag

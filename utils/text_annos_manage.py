@@ -19,7 +19,7 @@ from utils.string_manage import similarity_word
     }
 """
 
-SAME_FONT_THRESH = 0.7  # midium
+SAME_FONT_THRESH = 0.9  # midium
 SAME_LINE_THRESH = 0.5  # small
 MERGE_THRESH = 1.5  # small
 
@@ -103,8 +103,8 @@ def is_same_line(src_anno, dst_anno):
 
 def is_same_font_sz(src_anno, dst_anno):
     src_height = get_height(anno=src_anno)
-
     height = get_height(anno=dst_anno)
+
     if float(src_height / 2 + height / 2) == 0:
         return False
     
@@ -432,15 +432,17 @@ def bundle_to_lines(origin_annos):
         line_text = ""
         for anno_id in line:
             line_text += annos[anno_id]['text'] + ' '
-        temp_lines.append({
-            'ids': line,
-            'pos': line_pos,
-            'text': line_text})
+        if is_candi_line(line_text):
+            temp_lines.append({
+                'ids': line,
+                'pos': line_pos,
+                'text': line_text})
+        else:
+            continue
 
     sorted_lines = sorted(temp_lines, key=itemgetter('pos'))
 
     return sorted_lines
-
 
 def find_text_lines(annos, lines):
     text_lines = []
@@ -793,7 +795,7 @@ def merge_annos_on_lines(lines, annos):
             before_id = line['ids'][i - 1]
 
             dis = get_left_edge(annos[id])[0] - get_right_edge(annos[before_id])[0]
-            if dis < get_height(annos[before_id]) * MERGE_THRESH:
+            if dis < get_height(annos[before_id]) * MERGE_THRESH and is_same_font_sz(annos[id], annos[before_id]):
                 to_del.append(id)
                 merge_anno2anno(annos[before_id], annos[id])
 
