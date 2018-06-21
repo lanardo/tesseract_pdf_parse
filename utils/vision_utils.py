@@ -173,34 +173,38 @@ class VisionUtils:
             else:
                 # check the label of the uploaded image data
                 annos = []
-                annotations = response['textAnnotations']
-                for annotation in annotations[1:]:
-                    text = annotation['description']
-                    if type(text) is not str:
-                        text = text.encode("utf-8")
-                    anno = {'boundingBox': annotation['boundingPoly'],
-                            'text': text,
-                            'used': False}
-                    annos.append(anno)
+                if 'textAnnotations' not in response.keys():
+                    print("KeyError: 'textAnnotations'")
+                    result = None
+                else:
+                    annotations = response['textAnnotations']
+                    for annotation in annotations[1:]:
+                        text = annotation['description']
+                        if type(text) is not str:
+                            text = text.encode("utf-8")
+                        anno = {'boundingBox': annotation['boundingPoly'],
+                                'text': text,
+                                'used': False}
+                        annos.append(anno)
 
-                # recognize the orientation
-                orientation = self.__get_orientation(annos=annos)
-                annos = self.__correlate_orientation(annos=annos, ori=orientation, img=img)
+                    # recognize the orientation
+                    orientation = self.__get_orientation(annos=annos)
+                    annos = self.__correlate_orientation(annos=annos, ori=orientation, img=img)
 
-                if self.debug:  # display the line rect
-                    for i in range(len(annos)):
-                        for j in range(-1, 3):
-                            pt0 = annos[i]['boundingBox']['vertices'][j]
-                            pt1 = annos[i]['boundingBox']['vertices'][j + 1]
-                            cv2.line(img, (pt0['x'], pt0['y']), (pt1['x'], pt1['y']), (255, 0, 0), 1)
+                    if self.debug:  # display the line rect
+                        for i in range(len(annos)):
+                            for j in range(-1, 3):
+                                pt0 = annos[i]['boundingBox']['vertices'][j]
+                                pt1 = annos[i]['boundingBox']['vertices'][j + 1]
+                                cv2.line(img, (pt0['x'], pt0['y']), (pt1['x'], pt1['y']), (255, 0, 0), 1)
 
-                result = {'page_id': page_idx,
-                          'box_idx': box_idx,
-                          'annos': annos,
-                          'label': 'text',
-                          'orientation': orientation,
-                          'image': img,
-                          'total_text': annotations[0]['description']}
+                    result = {'page_id': page_idx,
+                              'box_idx': box_idx,
+                              'annos': annos,
+                              'label': 'text',
+                              'orientation': orientation,
+                              'image': img,
+                              'total_text': annotations[0]['description']}
 
             proc_queue.put(result, True, 1)
             if self.debug:

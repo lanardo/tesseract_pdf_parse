@@ -20,8 +20,8 @@ from utils.string_manage import similarity_word
 """
 
 SAME_FONT_THRESH = 0.7  # midium
-SAME_LINE_THRESH = 0.7  # small
-MERGE_THRESH = 0.2  # small
+SAME_LINE_THRESH = 0.5  # small
+MERGE_THRESH = 1.5  # small
 
 EMP = ""
 PERCENT_MARK = "%"
@@ -432,7 +432,10 @@ def bundle_to_lines(origin_annos):
         line_text = ""
         for anno_id in line:
             line_text += annos[anno_id]['text'] + ' '
-        temp_lines.append({'line': line, 'pos': line_pos, 'text': line_text})
+        temp_lines.append({
+            'ids': line,
+            'pos': line_pos,
+            'text': line_text})
 
     sorted_lines = sorted(temp_lines, key=itemgetter('pos'))
 
@@ -456,6 +459,15 @@ def find_text_lines(annos, lines):
 def get_left_edge(anno):
     return [(anno['boundingBox']['vertices'][0]['x'] + anno['boundingBox']['vertices'][3]['x']) / 2,
             (anno['boundingBox']['vertices'][0]['y'] + anno['boundingBox']['vertices'][3]['y']) / 2]
+
+
+def get_bottom_edge(anno):
+    return [(anno['boundingBox']['vertices'][2]['x'] + anno['boundingBox']['vertices'][3]['x']) / 2,
+            (anno['boundingBox']['vertices'][2]['y'] + anno['boundingBox']['vertices'][3]['y']) / 2]
+
+def get_top_edge(anno):
+    return [(anno['boundingBox']['vertices'][0]['x'] + anno['boundingBox']['vertices'][1]['x']) / 2,
+            (anno['boundingBox']['vertices'][0]['y'] + anno['boundingBox']['vertices'][1]['y']) / 2]
 
 
 def get_right_edge(anno):
@@ -729,3 +741,63 @@ def __get_digits(word):
         return word[pos: pos+len(max_di)]
     else:
         return EMP
+
+
+def get_cenpt(anno):
+    _ul1, _ur1, _br1, _bl1 = anno['boundingBox']['vertices']
+    return [(_ur1['x'] + _ul1['x'] + _br1['x'] + _bl1['x']) / 4,
+            (_ur1['y'] + _ul1['y'] + _br1['y'] + _bl1['y']) / 4]
+
+
+def is_overlap_anno(anno1, anno2):
+
+    text1 = anno1['text'].replace(' ', '')
+    text2 = anno2['text'].replace(' ', '')
+
+    if text1.find(text2) != -1 or text2.find(text1) != -1:
+        x1 = get_left_edge(anno1)[0]
+        y1 = get_top_edge(anno1)[1]
+        x2 = get_right_edge(anno1)[0]
+        y2 = get_bottom_edge(anno1)[1]
+
+        _x1 = get_left_edge(anno2)[0]
+        _y1 = get_top_edge(anno2)[1]
+        _x2 = get_right_edge(anno2)[0]
+        _y2 = get_bottom_edge(anno2)[1]
+
+        xx1 = max(x1, _x1)
+        yy1 = max(y1, _y1)
+        xx2 = min(x2, _x2)
+        yy2 = min(y2, _y2)
+
+        overlap = max((xx2 - xx1), 0) * max((yy2 - yy1), 0)
+        if overlap > 0:
+            return True
+
+    return False
+
+
+def merge_anno2anno(anno1, anno2):
+    _ul_1, _ur_1, _br_1, _bl_1 = anno1['boundingBox']['vertices']
+    _ul_2, _ur_2, _br_2, _bl_2 = anno2['boundingBox']['vertices']
+
+    anno1['text'] = anno1['text'] + ' ' + anno2['text']
+    anno1['boundingBox']['vertices'] = [_ul_1, _ur_2, _br_2, _bl_1]
+
+
+def merge_annos_on_lines(lines, annos):
+    for line in lines:
+        to_del = []
+        for i in range(len(line['ids']) - 1, 0, -1):
+            id = line['ids'][i]
+            before_id = line['ids'][i - 1]
+
+            dis = get_left_edge(annos[id])[0] - get_right_edge(annos[before_id])[0]
+            if dis < get_height(annos[before_id]) * MERGE_THRESH:
+                to_del.append(id)
+                merge_anno2anno(annos[before_id], annos[id])
+
+        new_id_list = copy.deepcopy(line['ids'])
+        for id in to_del:
+            new_id_list.remove(id)
+        line['ids'] = new_id_list

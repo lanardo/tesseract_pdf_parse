@@ -1,15 +1,11 @@
-import copy
-
-import cv2
-
 import logger as log
 import utils.string_manage as stringer
 import utils.text_annos_manage as manager
-
+from utils.settings import *
 
 EMP = ""
-SPLITER = "_/SP/_"
-THRESH_MIN_LINE_KEYS = 3
+THRESH_MERGE = 1.5
+SP = "_"
 
 
 class Table:
@@ -36,239 +32,162 @@ class Table:
     def parse_table(self, content):
         annos = content['annos']
         img = content['image']
+        img_height, img_width = img.shape[:2]
 
-        lines = manager.bundle_to_lines()
+        # clear the overlap annos --------------------------------------------------
+        to_del_ids = []
+        for i in range(len(annos) - 1):
+            for j in range(i+1, len(annos)):
+                if manager.is_overlap_anno(annos[i], annos[j]):
+                    if len(annos[i]['text']) > len(annos[j]['text']):
+                        to_del_ids.append(j)
+                    else:
+                        to_del_ids.append(i)
+        to_del_ids.sort()
+        for i in range(len(to_del_ids)-1, -1, -1):
+            del annos[to_del_ids[i]]
 
-        # --- determine title area -------------------------------------------------
-        title_anno_ids = []
-        title_txt = ""
-        keys = self.title.split(" ")
+        # --- bundle to the lines --------------------------------------------------------------
+        lines = manager.bundle_to_lines(origin_annos=annos)
 
-        for id in range(len(annos)):
-            if annos[id]['text'].upper().find(keys[0]) != -1:
-                title_anno_ids.append(id)
-                title_txt += annos[id]['text']
-                if stringer.equal(title_txt.upper(), self.title):
+        # --- merge the neighbors --------------------------------------------------------------
+        manager.merge_annos_on_lines(lines=lines, annos=annos)
+
+        # --- determine title line -------------------------------------------------------------
+        """
+            line = {
+                    'ids': line,
+                    'pos': line_pos, 
+                    'text': line_text}
+                    )
+        """
+        title_line_id = -1
+        for i in range(len(lines)):
+            line = lines[i]
+            line_text = line['text'].replace(' ', '')
+            for title in self.titles:
+                title_text = title.replace(' ', '')
+                if line_text.find(title_text) != -1:
+                    title_line_id = i
+                    res_title = title
                     break
 
-                right_id_1 = manager.get_right_neighbor(src_anno_id=id, annos=annos)[0]
-                if right_id_1 is None:
-                    continue
-                title_anno_ids.append(right_id_1)
-                title_txt += annos[right_id_1]['text']
-                if stringer.equal(title_txt.upper(), self.title):
-                    break
+        if title_line_id == -1:
+            err_msg = "can not find the title"
+            return err_msg
 
-                right_id_2 = manager.get_right_neighbor(src_anno_id=right_id_1, annos=annos)[0]
-                if right_id_2 is None:
-                    continue
-                title_anno_ids.append(right_id_2)
-                title_txt += annos[right_id_2]['text']
-                if stringer.equal(title_txt.upper(), self.title):
-                    break
+        # ----------------------------- configure the keywords -------------------------------------------
+        keyword = "TYPE"
+        keyword_line_id = -1
+        for line_id in range(title_line_id + 1, len(lines)):
+            if lines[line_id]['text'].find(keyword) != -1:
+                keyword_line_id = line_id
+                break
+        if keyword_line_id == -1:
+            err_msg = "can not find keyword line with {}".format(keyword)
+            return err_msg
 
-            title_anno_ids.clear()
-            title_txt = ''
+        # --------------------- update the keyword multi line --------------------------------
+        keyword_line = lines[keyword_line_id]
+        key_annos = []
+        for id in keyword_line['ids']:
+            key_annos.append(annos[id])
 
-        if len(title_txt) == 0:
-            log.log_print("not contains the target title.")
-            return
+        start_line_id = -1
+        for line_id in range(title_line_id + 1, len(lines)):
+            if line_id == keyword_line_id:
+                continue
+            cur_line = lines[line_id]
 
-        # --- determine the roi area -----------------------------------------------
-        fst_id = title_anno_ids[0]
-        last_id = title_anno_ids[-1]
-
-        _left_edge_id, _ = manager.get_left_neighbor_no_same_sz(src_anno_id=fst_id, annos=annos)
-        _right_edge_id, _ = manager.get_right_neighbor_no_same_sz(src_anno_id=last_id, annos=annos)
-
-        img = content['image']
-        height, width = img.shape[:2]
-        if _left_edge_id is None:
-            l_edge_pt = [0, manager.get_left_edge(annos[fst_id])[1]]
-        else:
-            l_edge_pt = manager.get_left_edge(annos[_left_edge_id])
-
-        if _right_edge_id is None:
-            r_edge_pt = [width, manager.get_left_edge(annos[last_id])[1]]
-        else:
-            r_edge_pt = manager.get_right_edge(annos[_right_edge_id])
-
-        candidates = []
-        for id in range(len(annos)):
-            anno = annos[id]
-            l_pt = manager.get_left_edge(anno)
-            r_pt = manager.get_right_edge(anno)
-            if l_edge_pt[0] < l_pt[0] < r_pt[0] < r_edge_pt[0] and l_pt[1] > l_edge_pt[1]:
-                candidates.append(anno)
-
-        print(l_edge_pt[1], l_edge_pt[0], r_edge_pt[0])
-        crop = img[int(l_edge_pt[1]):, int(l_edge_pt[0]):int(r_edge_pt[0])]
-        cv2.imwrite("crop_1.jpg", crop)
-
-        # ---------- configure the table -------------------------------------------
-        lines = manager.bundle_to_lines(origin_annos=candidates)
-
-        annos = copy.deepcopy(candidates)
-
-        min_pos = None
-        key_line_id = None
-        for line_id in range(len(lines)):
-            line = lines[line_id]
-            line_text = line['text'].upper()
-
-            pos = line_text.find(self.fst_key)
-            if pos != -1 and (min_pos is None or min_pos > pos):
-                min_pos = pos
-                key_line_id = line_id
-
-        if key_line_id is None:
-            return
-
-        num_keys = len(lines[key_line_id]['line'])
-        key_line = [""] * num_keys
-        key_anno_list = [None] * num_keys
-        for line_id in range(key_line_id + 1):
-            for j in lines[line_id]['line']:
-                min_dis = None
-                min_i = None
-                for i in lines[key_line_id]['line']:
-                    dis = manager.dis_anno2anno(annos[i], annos[j])
-                    if min_dis is None or min_dis > dis:
-                        min_dis = dis
-                        min_i = lines[key_line_id]['line'].index(i)
-                if min_dis is not None:
-                    key_line[min_i] += " " + annos[j]['text']
-                    key_anno_list[min_i] = annos[j]
-
-        # rearrange the keyword list --------------------------------------------------------
-        merge_pair_list = []
-        end_line_id = None
-        for line_id in range(key_line_id + 1, len(lines)):
-            for i in range(len(key_anno_list)):
-                for j in lines[line_id]['line']:
-                    try:
-                        if end_line_id is None:
-                            anno_l = manager.get_left_edge(annos[j])[0]
-                            anno_r = manager.get_right_edge(annos[j])[0]
-
-                            cur_key_r = manager.get_right_edge(key_anno_list[i])[0]
-                            next_key_l = manager.get_left_edge(key_anno_list[i + 1])[0]
-                            if anno_l < cur_key_r < next_key_l < anno_r and [i, i+1] not in merge_pair_list:
-                                merge_pair_list.append([i, i+1])
-
-                            before_key_r = manager.get_right_edge(key_anno_list[i - 1])[0]
-                            if anno_l < before_key_r < next_key_l < anno_r:
-                                end_line_id = line_id
-
-                    except Exception as e:
-                        continue
-
-        if end_line_id is None:
-            end_line_id = len(lines)
-        print(merge_pair_list)
-        if len(merge_pair_list) != 0:
-            for p in range(len(merge_pair_list) - 1 , -1, -1):
-                [p1, p2] = merge_pair_list[p]
-                try:
-                    key_line[p1] = key_line[p1] + key_line[p2]
-                    key_anno_list[p1]['text'] = key_anno_list[p1]['text'] + key_anno_list[p2]['text']
-                    key_line[p2] = None
-                    key_anno_list[p2] = None
-                except Exception:
-                    continue
-
-            i = len(key_anno_list) - 1
-            while i > 0:
-                if key_line[i] is None:
-                    del key_line[i]
-                if key_anno_list[i] is None:
-                    del key_anno_list[i]
-                i -= 1
-
-        # ------------ table ----------------------------------------------------------------------------------------
-        value_lines = []
-        last_line_id = None
-
-        for line_id in range(key_line_id + 1, end_line_id):
-            line = lines[line_id]['line']
-            
-            value_line = [""] * len(key_line)
-            start = 0
-            for k in range(0, len(key_anno_list)):
-                temp_str = EMP
-                if k == 0:  # first annotation
-                    for i in range(start, len(line)):
-                        if annos[line[i]]['used']: continue
-                        if manager.get_right_edge(annos[line[i]])[0] <= manager.get_left_edge(key_anno_list[k + 1])[0]:
-                            temp_str += annos[line[i]]['text'] + ' '
-                            annos[line[i]]['used'] = True
-                        else:
-                            start = i
-                            value_line[k] = temp_str
-                            break
-                elif k != len(key_anno_list) - 1:  # middle annotations
-                    for i in range(start, len(line)):
-                        if annos[line[i]]['used']:
-                            continue
-                        if manager.get_right_edge(key_anno_list[k - 1])[0] <= manager.get_left_edge(annos[line[i]])[0] and \
-                                    manager.get_right_edge(annos[line[i]])[0] < manager.get_left_edge(key_anno_list[k + 1])[0]:
-
-                            if i != len(line) - 1 and manager.dis_anno2anno(annos[line[i]], annos[line[i + 1]]) < 3 * manager.get_height(annos[lines[key_line_id]['line'][0]]):
-                                temp_str += annos[line[i]]['text'] + ' '
-                                annos[line[i]]['used'] = True
-                            else:
-                                temp_str += annos[line[i]]['text'] + ' '
-                                annos[line[i]]['used'] = True
-                                value_line[k] = temp_str
-                                start = i + 1
+            if line_id < keyword_line_id:
+                for id in cur_line['ids']:
+                    j = 0
+                    while j < len(key_annos):
+                        if j != len(key_annos):
+                            if manager.get_right_edge(key_annos[j])[0] < manager.get_left_edge(annos[id])[0] < manager.get_left_edge(key_annos[j + 1])[0]:
+                                key_annos.insert(j + 1, annos[id])
                                 break
-                        else:
-                            start = i
-                            value_line[k] = temp_str
-                            break
-                elif k == len(key_anno_list) - 1:  # last annotation
-                    for i in range(start, len(line)):
-                        if annos[line[i]]['used']:
-                            continue
-                        if manager.get_right_edge(key_anno_list[k - 1])[0] < manager.get_left_edge(annos[line[i]])[0]:
-                            temp_str += annos[line[i]]['text'] + ' '
-                            annos[line[i]]['used'] = True
-                    value_line[k] = temp_str
+                        elif j == len(key_annos) - 1:
+                            if manager.get_right_edge(key_annos[j])[0] < manager.get_left_edge(annos[id])[0]:
+                                key_annos.append(annos[id])
+                                break
+                        if manager.get_left_edge(key_annos[j])[0] < manager.get_left_edge(annos[id])[0] < manager.get_right_edge(key_annos[j + 1])[0]:
+                            key_annos[j]['text'] = annos[id]['text'] + SP + key_annos[j]['text']
+                        j += 1
 
-            if last_line_id is not None and manager.dis_line2line(lines[line_id], lines[last_line_id]) > 2 * manager.get_height(annos[lines[line_id]['line'][0]]):
+            if line_id > keyword_line_id:
+                if len(cur_line['ids']) > len(key_annos) // 3:
+                    start_line_id = line_id
+                    break
+                for id in cur_line['ids']:
+                    j = 0
+                    to_update_key_ids = [[]] * len(key_annos)
+                    while j < len(key_annos):
+                        if j == 0:
+                            if 0 < manager.get_cenpt(annos[id])[0] < manager.get_left_edge(key_annos[1])[0]:
+                                to_update_key_ids[0].append(annos[id])
+                        elif j == len(key_annos) - 1:
+                            if manager.get_right_edge(key_annos[-2])[0] < manager.get_cenpt(annos[id])[0] < img_width:
+                                to_update_key_ids[-1].append(annos[id])
+                        elif manager.get_right_edge(key_annos[j - 1])[0] < manager.get_cenpt(annos[id])[0] < \
+                                manager.get_left_edge(key_annos[j + 1])[0]:
+                            to_update_key_ids[j].append(annos[id])
+
+                    for j in range(len(to_update_key_ids) - 1, -1, -1):
+                        if len(to_update_key_ids[j]) == 0:
+                            continue
+                        base = key_annos[j]['text']
+                        del key_annos[j]
+                        for k in range(len(to_update_key_ids[j])-1, -1, -1):
+                            anno = to_update_key_ids[j][k]
+                            anno['text'] = base + anno['text']
+                            key_annos.insert(j, anno)
+
+        if start_line_id == -1:
+            err_msg = "error on configure the keyword lines"
+            return err_msg
+
+        # ----------- configure the table ------------------------------------------------------------
+        table = []
+        last_line = None
+        end_flag = False
+        for line_id in range(start_line_id, len(lines)):
+            if last_line is None:
+                dis = 0
+            else:
+                dis = cur_line['pos'] - last_line['pos']
+
+            cur_height = manager.get_height(annos[cur_line['ids'][0]])
+            if dis > cur_height * 0.5:
+                end_flag = True
                 break
 
-            if value_line[0] == "" and len(value_lines) > 0:
-                if value_line[1] == "":
-                    for j in range(len(value_lines[-1])):
-                        value_lines[-1][j] = value_lines[-1][j] + value_line[j]
-                else:
-                    _flag_same_line = True
-                    for j in range(len(value_lines[-1])):
-                        if value_lines[-1][j] == "" and value_line[j] != "":
-                            _flag_same_line = False
-
-                    _cnt1 = value_lines[-1].count("")
-                    _cnt2 = value_line.count("")
-                    if _cnt1 < _cnt2 or _cnt2 > len(value_line) // 3:
-                        _flag_same_line = False
-
-                    if _flag_same_line:
-                        for j in range(len(value_lines[-1])):
-                            value_lines[-1][j] = value_lines[-1][j] + value_line[j]
-                        continue
+            value_line = [''] * len(key_annos)
+            end_flag = False
+            for id in cur_line['ids']:
+                for j in range(len(key_annos)):
+                    if j == 0:
+                        if 0 < manager.get_cenpt(annos[id])[0] < manager.get_left_edge(key_annos[2])[0]:
+                            value_line[0] = annos[id]['text']
+                    elif j == len(key_annos) - 1:
+                        if manager.get_right_edge(key_annos[-2])[0] < manager.get_cenpt(annos[id])[0] < img_width:
+                            value_line[-1] = annos[id]['text']
+                    elif manager.get_right_edge(key_annos[j-1])[0] < manager.get_cenpt(annos[id])[0] < manager.get_left_edge(key_annos[j+1])[0]:
+                        value_line[j] = annos[id]['text']
                     else:
-                        value_lines.append(value_line)
-                        last_line_id = line_id
+                        end_flag = True
+                        break
+            if end_flag:
+                break
+            else:
+                table.append(value_line)
 
-                continue
-            value_lines.append(value_line)
-            last_line_id = line_id
-
-        result_dicts = []
-        for value_line in value_lines:
-            dict_line = {}
-            for i in range(len(key_line)):
-                dict_line[key_line[i]] = value_line[i]
-            result_dicts.append(dict_line)
-        return result_dicts
+        for key in key_annos:
+            sys.stdout.write(key['text'] + ' ')
+        for line in table:
+            print(line)
+        return {
+            'title': res_title,
+            'lines': table,
+            'keywords': [key_anno['text'] for key_anno in key_annos]
+        }

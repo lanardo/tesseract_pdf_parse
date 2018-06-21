@@ -128,12 +128,17 @@ def ocr_proc(src_file, debug=False):
         'total_text': annotations[0]['description']
     """
     contents = sorted(contents, key=lambda k: k['page_id'])
+
+    for i in range(len(contents)):
+        content = contents[i]
+        content = content
+        cv2.imwrite("crops_" + str(i) + ".jpg", content['image'])
     # for content in contents:
     #     img = content['image']
     #     cv2.imshow("show", img)
     #     cv2.waitKey(0)
 
-    result_dict = tab.parse_table(content=contents[0])
+    result_dict = tab.parse_table(content=content)
     print(result_dict)
     return result_dict
 
@@ -149,5 +154,5 @@ def save_temp_images(content):
 
 if __name__ == '__main__':
 
-    path = "D:/workspace/tesseract_pdf_parse/data/COM_15-1.jpg"
+    path = "D:/workspace/tesseract_pdf_parse/data/example_pdf/COM_7.pdf"
     ocr_proc(path)
