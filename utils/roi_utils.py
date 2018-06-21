@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+from utils.settings import *
 
 
 class RoiUtils:
@@ -24,7 +25,7 @@ class RoiUtils:
 
         thresh = cv2.adaptiveThreshold(resize, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 15, 1)
         if self.debug:
-            cv2.imwrite("thresh.jpg", thresh)
+            cv2.imwrite(LOG_DIR + "thresh.jpg", thresh)
 
         return thresh
 
@@ -37,7 +38,7 @@ class RoiUtils:
         horizontal = cv2.erode(horizontal, h_element, (-1, -1))
         horizontal = cv2.dilate(horizontal, h_element, (-1, -1))
         if self.debug:
-            cv2.imwrite("horizontal.jpg", horizontal)
+            cv2.imwrite(LOG_DIR + "horizontal.jpg", horizontal)
 
         vertical = binary.copy()
         v_sz = int(height / 30)
@@ -45,13 +46,13 @@ class RoiUtils:
         vertical = cv2.erode(vertical, v_element, (-1, -1))
         vertical = cv2.dilate(vertical, v_element, (-1, -1))
         if self.debug:
-            cv2.imwrite("vertical.jpg", vertical)
+            cv2.imwrite(LOG_DIR + "vertical.jpg", vertical)
 
         lines = cv2.bitwise_or(vertical, horizontal)
         element = cv2.getStructuringElement(cv2.MORPH_RECT, (self.margin, self.margin))
         lines = cv2.dilate(lines, element, (-1, -1))
         if self.debug:
-            cv2.imwrite("lines.jpg", lines)
+            cv2.imwrite(LOG_DIR + "lines.jpg", lines)
         return lines
 
     def extract_boxes(self, line_img):
@@ -144,9 +145,9 @@ class RoiUtils:
         #     cv2.rectangle(show_img, (x, y), (x1, y1), (0, 0, 255), 2)
         for [x, y, x1, y1] in candi_boxes:
             cv2.rectangle(show_img, (x, y), (x1, y1), (0, 0, 255), 10)
-        cv2.imwrite("contours.jpg", show_img)
+        cv2.imwrite(LOG_DIR + "contours.jpg", show_img)
         candi_img = binary_img + line_img
-        cv2.imwrite("candi_img.jpg", candi_img)
+        cv2.imwrite(LOG_DIR + "candi_img.jpg", candi_img)
 
         return candi_boxes, candi_img
 

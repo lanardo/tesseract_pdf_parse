@@ -5,8 +5,8 @@ import json
 import base64
 import requests
 import queue as qu
-import numpy as np
 import threading as thr
+import numpy as np
 # api key
 API_KEY = 'AIzaSyC_X5oZ5WdKAru6AGNrggNyMZNgs_w5elI'
 

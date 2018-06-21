@@ -29,70 +29,6 @@ class Table:
                 return True
         return False
 
-    def parse_table(self, content):
-        annos = content['annos']
-        img = content['image']
-        img_height, img_width = img.shape[:2]
-
-        # clear the overlap annos --------------------------------------------------
-        to_del_ids = []
-        for i in range(len(annos) - 1):
-            for j in range(i+1, len(annos)):
-                if manager.is_overlap_anno(annos[i], annos[j]):
-                    if len(annos[i]['text']) > len(annos[j]['text']):
-                        to_del_ids.append(j)
-                    else:
-                        to_del_ids.append(i)
-        to_del_ids.sort()
-        for i in range(len(to_del_ids)-1, -1, -1):
-            del annos[to_del_ids[i]]
-
-        # --- bundle to the lines --------------------------------------------------------------------------------------
-        lines = manager.bundle_to_lines(origin_annos=annos)
-
-        # --- merge the neighbors --------------------------------------------------------------------------------------
-        manager.merge_annos_on_lines(lines=lines, annos=annos)
-
-        # --- determine title line -------------------------------------------------------------------------------------
-        title_line_id, title_text = self.find_title_line(lines=lines)
-        if title_line_id == -1:
-            err_msg = "can not find the title"
-            return err_msg
-
-        # --- configure the keywords -----------------------------------------------------------------------------------
-        keyword_line_id = self.find_keyword_lind(lines=lines, title_line_id=title_line_id)
-        if keyword_line_id == -1:
-            err_msg = "can not find keyword line with {}".format(keyword)
-            return err_msg
-
-        # --------------------- update the keyword multi line ----------------------------------------------------------
-        key_annos, start_line_id = self.update_multi_keyword_line(annos=annos, lines=lines,
-                                                                  keyword_line_id=keyword_line_id,
-                                                                  title_line_id=title_line_id)
-        if start_line_id == -1:
-            err_msg = "error on configure the keyword lines"
-            return err_msg
-
-        # ----------- configure the table ------------------------------------------------------------------------------
-        table, _ = self.configure_table(annos=annos, lines=lines, key_annos=key_annos, start_line_id=start_line_id)
-
-        # --- show the result of the table -----------------------------------------------------------------------------
-        print("\n>>> lines: ")
-        for line in lines:
-            print(line['text'])
-        print("\n>>> keywords: ")
-        for key in key_annos:
-            sys.stdout.write('[' + key['text'] + '], ')
-        print("\n>>> Table: ")
-        for line in table:
-            print(line)
-
-        return {
-            'title': title_text,
-            'lines': table,
-            'keywords': [key_anno['text'] for key_anno in key_annos]
-        }
-
     def find_title_line(self, lines):
         """
                     line = {
@@ -145,7 +81,7 @@ class Table:
                     while j < len(key_annos):
                         if j != len(key_annos) - 1:
                             if manager.get_right_edge(key_annos[j])[0] < manager.get_left_edge(annos[id])[0] < \
-                                    manager.get_left_edge(key_annos[j + 1])[0]:
+                                    manager.get_right_edge(annos[id])[0] < manager.get_left_edge(key_annos[j + 1])[0]:
                                 key_annos.insert(j + 1, annos[id])
                                 break
                         elif j == len(key_annos) - 1:
@@ -209,23 +145,23 @@ class Table:
             end_flag = False
             for id in cur_line['ids']:
                 _candi_line_flag = False
-                for j in range(len(key_annos)):
+                for j in range(len(key_annos) - 1, -1, -1):
                     if j > 0 and manager.get_left_edge(annos[id])[0] < manager.get_right_edge(key_annos[j-1])[0] < manager.get_left_edge(key_annos[j])[0] < manager.get_right_edge(annos[id])[0]:
                         _candi_line_flag = False
                         break
 
                     if j == 0:
                         if 0 < manager.get_cenpt(annos[id])[0] < manager.get_left_edge(key_annos[1])[0]:
-                            value_line[0] = annos[id]['text']
+                            value_line[0] = value_line[0] + EMP + annos[id]['text']
                             _candi_line_flag = True
                             break
                     elif j == len(key_annos) - 1:
                         if manager.get_right_edge(key_annos[-2])[0] < manager.get_cenpt(annos[id])[0]:
-                            value_line[-1] = annos[id]['text']
+                            value_line[-1] = value_line[-1] + EMP + annos[id]['text']
                             _candi_line_flag = True
                             break
                     elif manager.get_right_edge(key_annos[j-1])[0] < manager.get_left_edge(annos[id])[0] < manager.get_right_edge(annos[id])[0] < manager.get_left_edge(key_annos[j+1])[0]:
-                        value_line[j] = annos[id]['text']
+                        value_line[j] = value_line[j] + EMP + annos[id]['text']
                         _candi_line_flag = True
                         break
 
@@ -236,17 +172,110 @@ class Table:
                 break
 
             else:
-                dis1 = lines[line_id]['pos'] - lines[line_id - 1]['pos']
-                dis2 = lines[line_id - 1]['pos'] - lines[line_id - 2]['pos']
+                # dis1 = lines[line_id]['pos'] - lines[line_id - 1]['pos']
+                # dis2 = lines[line_id - 1]['pos'] - lines[line_id - 2]['pos']
                 num_no_empty = len(value_line) - value_line.count(EMP)
-                if 2 < line_id < len(lines) - 1 and dis2 > dis1 and dis1 < cur_height * 1.5 and num_no_empty < len(value_line) // 3:
-                    for j in range(len(value_line)):
-                        table[-1][j] = table[-1][j] + ' ' + value_line[j]
-                elif 2 < line_id < len(lines) - 1 and num_no_empty <= len(value_line) // 4 and value_line[0] != EMP:
-                    end_flag = True
-                    continue
+                if 2 < line_id < len(lines) - 1 and num_no_empty <= len(value_line) // 3:  # dis2 > dis1 and dis1 < cur_height * 1.5 and
+                    if value_line[0] == EMP:
+                        for j in range(len(value_line)):
+                            table[-1][j] = table[-1][j] + ' ' + value_line[j]
+                    else:
+                        end_flag = True
+                        continue
                 else:
                     table.append(value_line)
                 last_line = lines[line_id]
 
         return table, end_flag
+
+    def show_dict(self, res_dict):
+        """
+        'title': title_text,
+        'lines': table,
+        'keywords': [key_anno['text'] for key_anno in key_annos]
+        """
+
+        title = res_dict['title']
+        print("\n>>> title: ")
+        print(title)
+
+        keywords = res_dict['keywords']
+        print("\n>>> keywords: ")
+        for key in keywords:
+            sys.stdout.write('[' + key + '], ')
+
+        lines = res_dict['lines']
+        print("\n>>> Table: ")
+        for line in lines:
+            print(line)
+
+    def parse_content(self, content):
+        annos = content['annos']
+        img = content['image']
+        img_height, img_width = img.shape[:2]
+
+        # clear the overlap annos --------------------------------------------------
+        to_del_ids = []
+        for i in range(len(annos) - 1):
+            for j in range(i + 1, len(annos)):
+                if manager.is_overlap_anno(annos[i], annos[j]):
+                    if len(annos[i]['text']) > len(annos[j]['text']):
+                        to_del_ids.append(j)
+                    else:
+                        to_del_ids.append(i)
+        to_del_ids.sort()
+        for i in range(len(to_del_ids) - 1, -1, -1):
+            del annos[to_del_ids[i]]
+
+        # --- bundle to the lines --------------------------------------------------------------------------------------
+        lines = manager.bundle_to_lines(origin_annos=annos)
+
+        # --- merge the line annos -------------------------------------------------------------------------------------
+        manager.merge_annos_on_lines(lines=lines, annos=annos)
+
+        # --- determine title line -------------------------------------------------------------------------------------
+        title_line_id, title_text = self.find_title_line(lines=lines)
+        if title_line_id == -1:
+            err_msg = "can not find the title"
+            return err_msg
+
+        # --- configure the keywords -----------------------------------------------------------------------------------
+        keyword_line_id = self.find_keyword_lind(lines=lines, title_line_id=title_line_id)
+        if keyword_line_id == -1:
+            err_msg = "can not find keyword line with {}".format(keyword)
+            return err_msg
+
+        # --------------------- update the keyword multi line ----------------------------------------------------------
+        key_annos, start_line_id = self.update_multi_keyword_line(annos=annos, lines=lines,
+                                                                  keyword_line_id=keyword_line_id,
+                                                                  title_line_id=title_line_id)
+        if start_line_id == -1:
+            err_msg = "error on configure the keyword lines"
+            return err_msg
+
+        # ----------- configure the table ------------------------------------------------------------------------------
+        table, _ = self.configure_table(annos=annos, lines=lines, key_annos=key_annos, start_line_id=start_line_id)
+
+        print("\n>>> raw lines: ")
+        for line in lines:
+            print(line['text'])
+        return {
+            'title': title_text,
+            'lines': table,
+            'keywords': [key_anno['text'] for key_anno in key_annos]
+        }
+
+    def parse_table(self, contents):
+        max_num_anno = -1
+        max_content_id = -1
+        for i in range(len(contents)):
+            content = contents[i]
+            annos = content['annos']
+            if len(annos) > max_num_anno:
+                max_num_anno = len(annos)
+                max_content_id = i
+
+        print("max_num_anno_content_id: ", max_content_id)
+        res_dict = self.parse_content(contents[max_content_id])
+        self.show_dict(res_dict)
+        return res_dict

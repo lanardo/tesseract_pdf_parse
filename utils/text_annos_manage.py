@@ -444,6 +444,7 @@ def bundle_to_lines(origin_annos):
 
     return sorted_lines
 
+
 def find_text_lines(annos, lines):
     text_lines = []
     for ids_line in lines:
@@ -788,14 +789,23 @@ def merge_anno2anno(anno1, anno2):
 
 
 def merge_annos_on_lines(lines, annos):
-    for line in lines:
+    for line_id in range(len(lines)):
+        if line_id < 5:
+            ratio = MERGE_THRESH
+        else:
+            ratio = MERGE_THRESH / 2
+
         to_del = []
+        line = lines[line_id]
         for i in range(len(line['ids']) - 1, 0, -1):
             id = line['ids'][i]
             before_id = line['ids'][i - 1]
 
+            if annos[before_id]['text'].find('TYPE') != -1 and annos[id]['text'].find('DESCRIPTION') != -1:
+                continue
+
             dis = get_left_edge(annos[id])[0] - get_right_edge(annos[before_id])[0]
-            if dis < get_height(annos[before_id]) * MERGE_THRESH and is_same_font_sz(annos[id], annos[before_id]):
+            if dis < get_height(annos[before_id]) * ratio and is_same_font_sz(annos[id], annos[before_id]):
                 to_del.append(id)
                 merge_anno2anno(annos[before_id], annos[id])
 

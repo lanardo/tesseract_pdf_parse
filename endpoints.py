@@ -76,11 +76,11 @@ def ocr_proc(src_file, debug=False):
     threads = []
     while page_contents_queue.qsize() == 0:
         # start the multi requests
-        for page in pages:
+        for page_idx in range(len(pages)):
+            page = pages[page_idx]
             if debug:
                 log.log_print("\tpage No: {}".format(page["id"] + 1))
 
-            page_idx = pages.index(page)
             crops = page["crops"]
             for i in range(len(crops)):
                 crop = crops[i]
@@ -129,28 +129,24 @@ def ocr_proc(src_file, debug=False):
     """
     contents = sorted(contents, key=lambda k: k['page_id'])
 
+    log.log_print("\t # candi contents: {}".format(len(contents)))
     for i in range(len(contents)):
         content = contents[i]
         content = content
-        cv2.imwrite("crops_" + str(i) + ".jpg", content['image'])
+        cv2.imwrite(LOG_DIR + "crops_" + str(i) + ".jpg", content['image'])
     # for content in contents:
     #     img = content['image']
     #     cv2.imshow("show", img)
     #     cv2.waitKey(0)
 
-    result_dict = tab.parse_table(content=content)
+    result_dict = tab.parse_table(contents=contents)
     return result_dict
 
 
 def save_temp_images(content):
-    # log.log_print("\t page No     : {}".format(content['id']))
-    # log.log_print("\t\t page label  : {}".format(content['label']))
-    # log.log_print("\t\t orientation : {}".format(ORIENTATIONS[content['orientation']]))
-    # log.log_print("\t\t len of annos: {}".format(len(content['annos'])))
-    # log.log_print("\t\t image size  : {} x {}".format(content['image'].shape[1], content['image'].shape[0]))
     cv2.imwrite("{}temp_{}.jpg".format(LOG_DIR, content['id'] + 1), content['image'])
 
 
 if __name__ == '__main__':
-    path = "D:/workspace/tesseract_pdf_parse/data/example_pdf/COM_2.pdf"
+    path = "D:/workspace/tesseract_pdf_parse/data/example_pdf/COM_5.pdf"
     ocr_proc(path)
