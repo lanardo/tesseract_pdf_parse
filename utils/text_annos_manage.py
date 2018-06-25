@@ -21,7 +21,7 @@ from utils.string_manage import similarity_word
 
 SAME_FONT_THRESH = 0.9  # midium
 SAME_LINE_THRESH = 0.5  # small
-MERGE_THRESH = 1.5  # small
+MERGE_THRESH = 1.10  # small
 
 EMP = ""
 PERCENT_MARK = "%"
@@ -757,27 +757,29 @@ def is_overlap_anno(anno1, anno2):
     text1 = anno1['text'].replace(' ', '')
     text2 = anno2['text'].replace(' ', '')
 
-    if text1.find(text2) != -1 or text2.find(text1) != -1:
-        x1 = get_left_edge(anno1)[0]
-        y1 = get_top_edge(anno1)[1]
-        x2 = get_right_edge(anno1)[0]
-        y2 = get_bottom_edge(anno1)[1]
+    x1 = get_left_edge(anno1)[0]
+    y1 = get_top_edge(anno1)[1]
+    x2 = get_right_edge(anno1)[0]
+    y2 = get_bottom_edge(anno1)[1]
 
-        _x1 = get_left_edge(anno2)[0]
-        _y1 = get_top_edge(anno2)[1]
-        _x2 = get_right_edge(anno2)[0]
-        _y2 = get_bottom_edge(anno2)[1]
+    _x1 = get_left_edge(anno2)[0]
+    _y1 = get_top_edge(anno2)[1]
+    _x2 = get_right_edge(anno2)[0]
+    _y2 = get_bottom_edge(anno2)[1]
 
-        xx1 = max(x1, _x1)
-        yy1 = max(y1, _y1)
-        xx2 = min(x2, _x2)
-        yy2 = min(y2, _y2)
+    xx1 = max(x1, _x1)
+    yy1 = max(y1, _y1)
+    xx2 = min(x2, _x2)
+    yy2 = min(y2, _y2)
 
-        overlap = max((xx2 - xx1), 0) * max((yy2 - yy1), 0)
-        if overlap > 0:
-            return True
+    overlap = max((xx2 - xx1), 0) * max((yy2 - yy1), 0)
+    if overlap > 0:
+        if text1.find(text2) != -1 or text2.find(text1) != -1:
+            return "same"
+        else:
+            return "error"
 
-    return False
+    return "false"
 
 
 def merge_anno2anno(anno1, anno2):
@@ -793,7 +795,7 @@ def merge_annos_on_lines(lines, annos):
         if line_id < 5:
             ratio = MERGE_THRESH
         else:
-            ratio = MERGE_THRESH / 2
+            ratio = 0.7
 
         to_del = []
         line = lines[line_id]

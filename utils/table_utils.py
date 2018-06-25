@@ -220,7 +220,8 @@ class Table:
         to_del_ids = []
         for i in range(len(annos) - 1):
             for j in range(i + 1, len(annos)):
-                if manager.is_overlap_anno(annos[i], annos[j]):
+                ov = manager.is_overlap_anno(annos[i], annos[j])
+                if ov in ["same", "error"]:
                     if len(annos[i]['text']) > len(annos[j]['text']):
                         to_del_ids.append(j)
                     else:
@@ -261,10 +262,19 @@ class Table:
         print("\n>>> raw lines: ")
         for line in lines:
             print(line['text'].encode('utf-8'))
+
+        # rearrange the result dict ------------------------------------------------------------------------------------
+        line_dict_list = []
+        for line in table:
+            line_dict = {}
+            for i in range(len(key_annos)):
+                key = key_annos[i]['text']
+                value = line[i]
+                line_dict[key] = value.encode('utf-8')
+            line_dict_list.append(line_dict)
+
         return {
-            'title': title_text,
-            'lines': table,
-            'keywords': [key_anno['text'] for key_anno in key_annos]
+            'table': line_dict_list
         }
 
     def parse_table(self, contents):
@@ -283,6 +293,7 @@ class Table:
         if type(result) == str:
             print(result)
         else:
+            print(result)
             # self.show_dict(result)
             pass
         return result
